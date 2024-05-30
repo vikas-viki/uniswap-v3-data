@@ -3,8 +3,11 @@ import fetch from "node-fetch";
 import { parse } from "json2csv";
 import fs from "fs";
 import * as constants from "./constants.cjs";
-import { getCurrentAccruedFees } from "./temp.js"
+import * as temps from "./temp.js"
 import { ethers } from "ethers";
+import BigNumber from 'bignumber.js';
+
+BigNumber.config({ EXPONENTIAL_AT: 999999, DECIMAL_PLACES: 40 });
 
 const client = new Client({
   url: constants.ETH_QUERY_URL,
@@ -123,30 +126,6 @@ const PositionTimeStampQuery = gql`
   }
 `;
 
-const TICK_BASE = 1.0001;
-
-function tickToPrice(tick) {
-  return Math.pow(TICK_BASE, tick);
-}
-
-const getPoolMetadata = async (poolId) => {
-  const result = await client.query(poolQuery, { pool: poolId }).toPromise();
-
-  const token0Price = await client_Messari.query(PriceQuery, { id: result.data.pool.token0.id });
-  const token1Price = await client_Messari.query(PriceQuery, { id: result.data.pool.token1.id });
-
-  return [
-    result.data.pool.tick,
-    result.data.pool.sqrtPrice,
-    token0Price.data.token.lastPriceUSD,
-    token1Price.data.token.lastPriceUSD,
-    result.data.pool.token0.symbol,
-    result.data.pool.token0.id,
-    result.data.pool.token1.symbol,
-    result.data.pool.token1.id
-  ];
-};
-
 const getPositions = async (poolId, positionCount) => {
   const positions = [];
   let lastPositionTimeStamp = "0";
@@ -157,15 +136,18 @@ const getPositions = async (poolId, positionCount) => {
         .query(PositionsQuery, { id: poolId, timestamp_gt: lastPositionTimeStamp })
         .toPromise();
 
-      const fetchedPositions = result?.data?.positions;
-      if (!fetchedPositions.length) break;
+      const fetchedPositions = result?.data?.positions || [];
+      if (fetchedPositions.length === 0) break;
 
-      positions.push(...fetchedPositions.id);
-      lastTimestampOpened = fetchedPositions[fetchedPositions.length - 1].transaction.timestamp;
+      console.log(fetchedPositions[fetchedPositions.length - 1].transaction.timestamp);
+      positions.push(...fetchedPositions.map(position => position.id));
+      lastPositionTimeStamp = fetchedPositions[fetchedPositions.length - 1].transaction.timestamp;
 
       console.log("fetched!");
     } catch (error) {
-      console.log("ERROR");
+      console.log("ERROR: ", error);
+      // Optionally handle error (e.g., retry, break loop, etc.)
+      break; // Exit loop on error
     }
   }
 
@@ -189,67 +171,106 @@ async function getPositionInfo(positionId) {
   }
 }
 
-async function getCurrentLiquidityBalanceAmounts(positionId, poolTick, sqrtPrice) {
+const TICK_BASE = new BigNumber(1.0001);
 
+function tickToPrice(tick) {
+  return TICK_BASE.pow(tick);
+}
+
+const getPoolMetadata = async (poolId) => {
+  const result = await client.query(poolQuery, { pool: poolId }).toPromise();
+  if (result.error) throw new Error(result.error.message);
+  if (!result.data || !result.data.pool) throw new Error("Pool data not found");
+
+  const poolData = result.data.pool;
+  var sqrtPrice = new BigNumber(poolData.sqrtPrice.toString());
+
+  const token0PriceResult = await client_Messari.query(PriceQuery, { id: poolData.token0.id.toLowerCase() }).toPromise();
+  const token1PriceResult = await client_Messari.query(PriceQuery, { id: poolData.token1.id.toLowerCase() }).toPromise();
+
+  if (token0PriceResult.error) throw new Error(token0PriceResult.error.message);
+  if (token1PriceResult.error) throw new Error(token1PriceResult.error.message);
+
+  const token0Price = token0PriceResult.data.token.lastPriceUSD;
+  const token1Price = token1PriceResult.data.token.lastPriceUSD;
+
+  return [
+    poolData.tick,
+    sqrtPrice.toString(),
+    new BigNumber(token0Price).toFixed(5),
+    new BigNumber(token1Price).toFixed(5),
+    poolData.token0.symbol,
+    poolData.token0.id,
+    poolData.token1.symbol,
+    poolData.token1.id
+  ];
+};
+
+
+async function getCurrentLiquidityBalanceAmounts(positionId, poolTick, sqrtPrice) {
   const position = await getPositionInfo(positionId);
 
-  const liquidity = parseInt(position.liquidity);
-  const tickLower = parseInt(position.tickLower.tickIdx);
-  const tickUpper = parseInt(position.tickUpper.tickIdx);
+  const liquidity = new BigNumber(position.liquidity);
+  const tickLower = new BigNumber(position.tickLower.tickIdx);
+  const tickUpper = new BigNumber(position.tickUpper.tickIdx);
 
-  const decimals0 = parseInt(position.token0.decimals);
-  const decimals1 = parseInt(position.token1.decimals);
+  const decimals0 = new BigNumber(position.token0.decimals);
+  const decimals1 = new BigNumber(position.token1.decimals);
 
-  const currentTick = poolTick;
-  const currentSqrtPrice = sqrtPrice;
+  const currentTick = new BigNumber(poolTick);
+  const currentSqrtPrice = new BigNumber(sqrtPrice);
 
-  const sa = tickToPrice(tickLower / 2);
-  const sb = tickToPrice(tickUpper / 2);
+  const sa = tickToPrice(tickLower.div(2));
+  const sb = tickToPrice(tickUpper.div(2));
 
   let amount0, amount1;
 
-  if (tickUpper <= currentTick) {
+  if (tickUpper.lte(currentTick)) {
     // Only token1 locked
-    amount0 = 0;
-    amount1 = liquidity * (sb - sa);
-  } else if (tickLower < currentTick && currentTick < tickUpper) {
+    amount0 = new BigNumber(0);
+    amount1 = liquidity.times(sb.minus(sa));
+  } else if (tickLower.lt(currentTick) && currentTick.lt(tickUpper)) {
     // Both tokens present
-    amount0 = liquidity * (sb - currentSqrtPrice) / (currentSqrtPrice * sb);
-    amount1 = liquidity * (currentSqrtPrice - sa);
+    amount0 = liquidity.times(sb.minus(currentSqrtPrice)).div(currentSqrtPrice.times(sb));
+    amount1 = liquidity.times(currentSqrtPrice.minus(sa));
   } else {
     // Only token0 locked
-    amount0 = liquidity * (sb - sa) / (sa * sb);
-    amount1 = 0;
+    amount0 = liquidity.times(sb.minus(sa)).div(sa.times(sb));
+    amount1 = new BigNumber(0);
   }
 
   // Print info about the position
-  const adjustedAmount0 = amount0 / Math.pow(10, decimals0);
-  const adjustedAmount1 = amount1 / Math.pow(10, decimals1);
+  const adjustedAmount0 = amount0.div(new BigNumber(10).pow(decimals0));
+  const adjustedAmount1 = amount1.div(new BigNumber(10).pow(decimals1));
 
-  return [adjustedAmount0, adjustedAmount1, decimals0, decimals1];
+  return [adjustedAmount0.toString(), adjustedAmount1.toString(), decimals0.toString(), decimals1.toString()];
 }
 
 async function getTimeStamps(tickLower, tickUpper, owner, pool, liquidity) {
   var variables = { index: tickUpper, index1: tickLower, liquidity: liquidity, id: owner, id1: pool };
   var result = await client_Messari.query(PositionTimeStampQuery, variables);
 
-  return [result.data.positions[0].timestampOpened, result.data.positions[0].timestampClosed];
+  return [result.data.positions[0]?.timestampOpened, result.data.positions[0]?.timestampClosed == null ? Math.floor(Date.now() / 1000) : result.data.positions[0]?.timestampClosed];
 }
 
 /*
 APR
 */
 const getPositionDetails = async (poolAddress, positionId, poolTick, sqrtPrice, token0Price, token1Price) => {
+
   var positionDetails = (await client.query(PositionDetailsQuery, { id: positionId }).toPromise()).data.position;
 
   var currentLiquidityBalanceAmounts = await getCurrentLiquidityBalanceAmounts(positionId, poolTick, sqrtPrice);
 
-  var currentLiquidityUSD = (currentLiquidityBalanceAmounts[0] * token0Price) + (currentLiquidityBalanceAmounts[1] * token1Price);
+  var timeStamps = await getTimeStamps(positionDetails.tickLower, positionDetails.tickUpper, positionDetails.owner, poolAddress, positionDetails.liquidity);
 
-  var currentAccruedFees = await getCurrentAccruedFees(positionId, positionDetails.owner);
+  console.log("currentLiquidityBalanceAmounts: ", currentLiquidityBalanceAmounts);
+  var currentLiquidityUSD = (Number(currentLiquidityBalanceAmounts[0]) * token0Price) + (Number(currentLiquidityBalanceAmounts[1]) * token1Price);
 
-  let currentFeeAmount0 = Number(ethers.utils.formatUnits(currentAccruedFees[0], currentLiquidityBalanceAmounts[2])).toFixed(5);
-  let currentFeeAmount1 = Number(ethers.utils.formatUnits(currentAccruedFees[1], currentLiquidityBalanceAmounts[3])).toFixed(5);
+  var currentAccruedFees = await temps.getCurrentAccruedFees(positionId, positionDetails.owner);
+
+  let currentFeeAmount0 = Number(ethers.utils.formatUnits(currentAccruedFees[0], Number(currentLiquidityBalanceAmounts[2]))).toFixed(5);
+  let currentFeeAmount1 = Number(ethers.utils.formatUnits(currentAccruedFees[1], Number(currentLiquidityBalanceAmounts[3]))).toFixed(5);
 
   var uncollectedFeesUSD = (currentFeeAmount0 * token0Price) + (currentFeeAmount1 * token1Price);
   var collectedFeesUSD = (Number(positionDetails.collectedFeesToken0) * token0Price) + (Number(positionDetails.collectedFeesToken1) * token1Price);
@@ -259,34 +280,40 @@ const getPositionDetails = async (poolAddress, positionId, poolTick, sqrtPrice, 
 
   var pnl = currentLiquidityUSD - totalDepositUSd + totalWithdrawnUSd + uncollectedFeesUSD + collectedFeesUSD;
 
-  var timeStamps = await getTimeStamps(positionDetails.tickLower, positionDetails.tickUpper, positionDetails.owner, poolAddress, positionDetails.liquidity);
 
   return {
+    nftID: positionId,
     address: positionDetails.owner,
     tickUpper: positionDetails.tickUpper,
     tickLower: positionDetails.tickLower,
+    totalDepositUSd: totalDepositUSd,
     currentLiquidityUSD,
     feesClaimedUSD: collectedFeesUSD,
     unclaimedFeesUSD: uncollectedFeesUSD,
     pnl,
     timestampOpened: timeStamps[0],
-    timestampClosed: timeStamps[1] || Math.floor(Date.now() / 1000)
+    timestampClosed: timeStamps[1]
   }
 }
 
 const getPositionsAndDetails = async (poolAddress) => {
+  var currentTimeStamp = Math.floor(Date.now() / 1000);
   var poolMetadata = await getPoolMetadata(poolAddress);
 
+  console.log("GOT POOL METADATA");
+
   var positionIds = await getPositions(poolAddress, '5000');
+
+  console.log("GOT POSITIONS: ", positionIds.length);
 
   var positionDetails = [];
 
   for (let i = 0; i < positionIds.length; i++) {
-    var positionDetail = await getPositionDetails(poolAddress, positionIds[i], Number(poolMetadata[0]), Number(poolMetadata[1]));
-
+    var positionDetail = await getPositionDetails(poolAddress, positionIds[i], Number(poolMetadata[0]), Number(poolMetadata[1]), poolMetadata[2], poolMetadata[3], currentTimeStamp);
+    console.log(positionDetail);
     positionDetails.push(positionDetail);
   }
-
+  console.log("GOT ALL THE DETAILS");
   var data = [
     {
       'Pool Address': poolAddress,
@@ -297,37 +324,43 @@ const getPositionsAndDetails = async (poolAddress) => {
     {},
     {
       'Account': 'Account',
+      'nftID': 'nftID',
       'Tick Lower': 'Tick Lower',
       'Tick Upper': 'Tick Upper',
       'Timestamp Closed': 'Timestamp Closed',
       'Timestamp Opened': 'Timestamp Opened',
       'Current liquidity USD': 'Current liquidity USD',
-      'Fees claimed': 'Fees claimed',
-      'Fees unclaimed': 'Fees unclaimed',
-      "PNL": "PNL"
+      'Deposited USD': 'Deposited USD',
+      'Fees claimed USD': 'Fees claimed USD',
+      'Fees unclaimed USD': 'Fees unclaimed USD',
+      'Current timestamp': 'Current timestamp',
+      'PNL': 'PNL'
     },
     ...positionDetails.map(position => ({
       'Account': position.address,
+      'nftID': position.nftID,
       'Tick Lower': position.tickLower,
       'Tick Upper': position.tickUpper,
       'Timestamp Closed': position.timestampClosed,
       'Timestamp Opened': position.timestampOpened,
       'Current liquidity USD': position.currentLiquidityUSD,
-      'Fees claimed': position.feesClaimedUSD,
-      'Fees unclaimed': position.unclaimedFeesUSD,
-      "PNL": position.pnl
+      'Deposited USD': position.totalDepositUSd,
+      'Fees claimed USD': position.feesClaimedUSD,
+      'Fees unclaimed USD': position.unclaimedFeesUSD,
+      'Current timestamp': currentTimeStamp,
+      'PNL': position.pnl
     }))
   ];
-
 
   const csv = parse(data);
   const filePath = poolMetadata[4].toString() + '_' + poolMetadata[6].toString() + '_positions.csv';
   fs.writeFileSync(filePath, csv);
 
   console.log('CSV file written successfully');
+
 };
 
 (async () => {
-  const poolAddress = "0x8ad599c3A0ff1De082011EFDDc58f1908eb6e6D8";
+  const poolAddress = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".toLowerCase();
   await getPositionsAndDetails(poolAddress);
 })();

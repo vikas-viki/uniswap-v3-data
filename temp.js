@@ -5,7 +5,7 @@ var abi = [{ "inputs": [{ "internalType": "address", "name": "_factory", "type":
 var provider = new ethers.providers.JsonRpcProvider("https://eth-mainnet.g.alchemy.com/v2/IzDzIQ2JzDMIoJhm1XMrWuLnhN-vwGeg");
 var positionManager = new ethers.Contract("0xC36442b4a4522E871399CD717aBDD847Ab11FE88", abi, provider);
 
-async function getCurrentAccruedFees(tokenId, owner) {
+export async function getCurrentAccruedFees(tokenId, owner) {
     try {
         const results = await positionManager.callStatic.collect(
             {
@@ -26,8 +26,4 @@ async function getCurrentAccruedFees(tokenId, owner) {
         return [0, 0];
     }
 
-}
-
-module.exports = {
-    getCurrentAccruedFees
 }

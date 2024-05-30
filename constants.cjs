@@ -1,6 +1,7 @@
-const API_KEY = "ed8170fbbfb3d1664e55bd33efb99d71";
+const API_KEY = "3446bc21efbcbf6cb08041c600f6f0da";
 
-const ETH_QUERY_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/deployments/id/QmZeCuoZeadgHkGwLwMeguyqUKz1WPWQYKcKyMCeQqGhsF`;
+const ETH_QUERY_URL = `https://api.thegraph.com/subgraphs/name/revert-finance/uniswap-v3-mainnet`;
+// const ETH_QUERY_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/deployments/id/QmZeCuoZeadgHkGwLwMeguyqUKz1WPWQYKcKyMCeQqGhsF`;
 // const ETH_QUERY_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/4cKy6QQMc5tpfdx8yxfYeb9TLZmgLQe44ddW1G7NwkA6`;
 const BASE_QUERY_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/FUbEPQw1oMghy39fwWBFY5fE6MXPXZQtjncQy2cXdrNS`;
 const ARB_QUERY_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/FQ6JYszEKApsBpAmiHesRsd9Ygc6mzmpNRANeVQFYoVX`;
