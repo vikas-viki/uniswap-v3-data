@@ -41,6 +41,7 @@ const getPoolData = async (poolAddress, network) => {
   const result = await client.query(trxnQuery, { pool: poolId }).toPromise();
 
   const poolData = result.data.liquidityPool;
+  console.log("poolData: ", poolData);
   const feeTier = poolData.fees[0].feePercentage * 10000;
   const currentDay = poolData.dailySnapshots[0].day + 1;
 
@@ -72,61 +73,15 @@ const getPoolData = async (poolAddress, network) => {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'PoolData');
   var name = poolData.symbol.split(" ").join("").replace("/", "_");
-  XLSX.writeFile(workbook, `${network}_POOLS/${network}_${name}.xlsx`);
+  XLSX.writeFile(workbook, `data/${network}_POOLS/${network}_${name}.xlsx`);
 
   console.log('Excel file written successfully');
 };
 
 const getAllPoolsData = async () => {
   for (const key in constants.BASE_pools) {
-    await getPoolData(constants.BASE_pools[key], "BASE");
+    await getPoolData(constants.BASE_pools[key].toLowerCase(), "BASE");
   }
 }
 
 getAllPoolsData();
-/**
- * TVL
-$14.1M
-0.25%
-24H volume
-$27.2M
-78.67%
-24H fees
-$13.6K
-
-
-query MyQuery {
-  positions(where: {owner: "0xdd95f2e27c7660785bde0e24d779a0c658f93fe3"}) {
-    amountCollectedUSD
-    amountDepositedUSD
-    transaction {
-      mints {
-        timestamp
-        tickUpper
-        tickLower
-      }
-      burns {
-        timestamp
-        tickUpper
-      }
-      collects {
-        amountUSD
-      }
-    }
-    pool {
-      tick
-      token0 {
-        name
-      }
-      token1 {
-        name
-      }
-    }
-    owner
-    collectedFeesToken0
-    withdrawnToken0
-    withdrawnToken1
-    collectedFeesToken1
-  }
-}
- */

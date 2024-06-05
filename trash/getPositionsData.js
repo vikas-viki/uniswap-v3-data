@@ -2,7 +2,7 @@ import { gql, Client, cacheExchange, fetchExchange } from "@urql/core";
 import fetch from "node-fetch";
 import { parse } from "json2csv";
 import fs from "fs";
-import * as constants from "./constants.cjs";
+import * as constants from "../constants.cjs";
 
 const client = new Client({
   url: constants.ETH_QUERY_URL,

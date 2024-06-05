@@ -3,7 +3,7 @@ import fetch from "node-fetch";
 import { parse } from "json2csv";
 import fs from "fs";
 import * as constants from "./constants.cjs";
-import * as temps from "./temp.js"
+import * as temps from "./utils.js"
 import { ethers } from "ethers";
 import BigNumber from 'bignumber.js';
 
@@ -183,7 +183,7 @@ const getPoolMetadata = async (poolId) => {
   if (!result.data || !result.data.pool) throw new Error("Pool data not found");
 
   const poolData = result.data.pool;
-  var sqrtPrice = new BigNumber(poolData.sqrtPrice.toString());
+  // var sqrtPrice = new BigNumber(poolData.sqrtPrice.toString());
 
   const token0PriceResult = await client_Messari.query(PriceQuery, { id: poolData.token0.id.toLowerCase() }).toPromise();
   const token1PriceResult = await client_Messari.query(PriceQuery, { id: poolData.token1.id.toLowerCase() }).toPromise();
@@ -196,7 +196,7 @@ const getPoolMetadata = async (poolId) => {
 
   return [
     poolData.tick,
-    sqrtPrice.toString(),
+    poolData.sqrtPrice,
     new BigNumber(token0Price).toFixed(5),
     new BigNumber(token1Price).toFixed(5),
     poolData.token0.symbol,
@@ -211,8 +211,8 @@ async function getCurrentLiquidityBalanceAmounts(positionId, poolTick, sqrtPrice
   const position = await getPositionInfo(positionId);
 
   const liquidity = new BigNumber(position.liquidity);
-  const tickLower = new BigNumber(position.tickLower.tickIdx);
-  const tickUpper = new BigNumber(position.tickUpper.tickIdx);
+  const tickLower = new BigNumber(position.tickLower.tickIndex);
+  const tickUpper = new BigNumber(position.tickUpper.tickIndex);
 
   const decimals0 = new BigNumber(position.token0.decimals);
   const decimals1 = new BigNumber(position.token1.decimals);
@@ -302,7 +302,7 @@ const getPositionsAndDetails = async (poolAddress) => {
 
   console.log("GOT POOL METADATA");
 
-  var positionIds = await getPositions(poolAddress, '5000');
+  var positionIds = await getPositions(poolAddress, '1000');
 
   console.log("GOT POSITIONS: ", positionIds.length);
 

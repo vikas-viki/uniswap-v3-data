@@ -8,6 +8,10 @@ const ARB_QUERY_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_K
 
 const MESSARI_ETH_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/4cKy6QQMc5tpfdx8yxfYeb9TLZmgLQe44ddW1G7NwkA6`;
 
+// backup subgraphs
+const NEW_URL_ARB = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/FbCGRftH4a3yZugY7TnbYgPJVEv2LvMT6oF1fxPe9aJM`;
+const NEW_URL_BASE = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/43Hwfi3dJSoGpyas9VwNoDAv55yjgGrPpNSmbQZArzMG`;
+
 const ETH_pools = {
     "USDC_USDT": "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6",
     "USDT_DAI": "0x48DA0965ab2d2cbf1C17C09cFB5Cbe67Ad5B1406",
@@ -16,11 +20,6 @@ const ETH_pools = {
     "WETH_USDT": "0x4e68Ccd3E89f51C3074ca5072bbAC773960dFa36",
     "WETH_DAI": "0xC2e9F25Be6257c210d7Adf0D4Cd6E3E881ba25f8",
 }
-
-// WBTC_USDC = 0x99ac8cA7087fA4A2A1FB6357269965A2014ABc35
-//
-//
-//
 
 const BASE_pools = {
     "USDC_USDT": "0xD56da2B74bA826f19015E6B7Dd9Dae1903E85DA1",
@@ -78,5 +77,7 @@ module.exports = {
     WETH,
     USDC,
     USDT,
-    MESSARI_ETH_URL
+    MESSARI_ETH_URL,
+    NEW_URL_ARB,
+    NEW_URL_BASE
 }
