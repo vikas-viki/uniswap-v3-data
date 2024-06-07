@@ -1,16 +1,17 @@
 const API_KEY = "3446bc21efbcbf6cb08041c600f6f0da";
 
 const ETH_QUERY_URL = `https://api.thegraph.com/subgraphs/name/revert-finance/uniswap-v3-mainnet`;
-// const ETH_QUERY_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/deployments/id/QmZeCuoZeadgHkGwLwMeguyqUKz1WPWQYKcKyMCeQqGhsF`;
-// const ETH_QUERY_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/4cKy6QQMc5tpfdx8yxfYeb9TLZmgLQe44ddW1G7NwkA6`;
 const BASE_QUERY_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/FUbEPQw1oMghy39fwWBFY5fE6MXPXZQtjncQy2cXdrNS`;
 const ARB_QUERY_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/FQ6JYszEKApsBpAmiHesRsd9Ygc6mzmpNRANeVQFYoVX`;
 
+// MESSARI query urls.
 const MESSARI_ETH_URL = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/4cKy6QQMc5tpfdx8yxfYeb9TLZmgLQe44ddW1G7NwkA6`;
 
-// backup subgraphs
-const NEW_URL_ARB = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/FbCGRftH4a3yZugY7TnbYgPJVEv2LvMT6oF1fxPe9aJM`;
-const NEW_URL_BASE = `https://gateway-arbitrum.network.thegraph.com/api/${API_KEY}/subgraphs/id/43Hwfi3dJSoGpyas9VwNoDAv55yjgGrPpNSmbQZArzMG`;
+
+// REVERT FINANCE urls.
+const RF_BASE = `https://api.thegraph.com/subgraphs/name/revert-finance/uniswap-v3-base`;
+const RF_ARB = `https://api.thegraph.com/subgraphs/name/ianlapham/uniswap-arbitrum-one`;
+const RF_ETH = `https://api.thegraph.com/subgraphs/name/uniswap/uniswap-v3`;
 
 const ETH_pools = {
     "USDC_USDT": "0x3416cF6C708Da44DB2624D63ea0AAef7113527C6",
@@ -78,6 +79,7 @@ module.exports = {
     USDC,
     USDT,
     MESSARI_ETH_URL,
-    NEW_URL_ARB,
-    NEW_URL_BASE
+    RF_ETH,
+    RF_ARB,
+    RF_BASE
 }
