@@ -53,13 +53,14 @@ const PositionsQuery = gql`
   query PositionsQuery($id: ID!, $timestamp_gt: BigInt){
     positions(
         where: {pool_: {id: $id}, transaction_: {timestamp_gt: $timestamp_gt}}
-        first: 10
+        first: 1000
         orderBy: transaction__timestamp
         orderDirection: asc
       ) {
         id
         transaction {
             timestamp
+            blockNumber
         }
       }
   }
@@ -127,6 +128,7 @@ const PositionTimeStampQuery = gql`
 
 const getPositions = async (poolId, positionCount) => {
   const positions = [];
+  const blocknumbers = [];
   let lastPositionTimeStamp = "0";
 
   for (let i = 0; i < positionCount; i += 1000) {
@@ -140,6 +142,7 @@ const getPositions = async (poolId, positionCount) => {
 
       console.log(fetchedPositions[fetchedPositions.length - 1].transaction.timestamp);
       positions.push(...fetchedPositions.map(position => position.id));
+      blocknumbers.push(...fetchedPositions.map(position => position.transaction.blockNumber));
       lastPositionTimeStamp = fetchedPositions[fetchedPositions.length - 1].transaction.timestamp;
 
       console.log("fetched!");
@@ -149,8 +152,8 @@ const getPositions = async (poolId, positionCount) => {
       break; // Exit loop on error
     }
   }
-
-  return positions;
+  console.log(blocknumbers);
+  return [positions, blocknumbers];
 };
 
 async function getPositionInfo(positionId) {
@@ -302,8 +305,10 @@ const getPositionsAndDetails = async (poolAddress, network) => {
 
   console.log("GOT POOL METADATA");
 
-  var positionIds = await getPositions(poolAddress, 1000);
-
+  var position = await getPositions(poolAddress, 6000);
+  var positionIds = position[0];
+  var blocknumber = position[1];
+  
   console.log("GOT POSITIONS: ", positionIds.length);
 
   var positionDetails = [];
@@ -320,7 +325,7 @@ const getPositionsAndDetails = async (poolAddress, network) => {
       nfpm
     );
     console.log("getting data: ", i);
-    let tick = await getTickAtTimestamp(positionDetail.timestampOpened, rpc, poolAddress);
+    let tick = await getTickAtTimestamp(positionDetail.timestampOpened, rpc, poolAddress, Number(blocknumber[i]));
     positionDetail.tick = tick;
     positionDetails.push(positionDetail);
   }
@@ -385,7 +390,7 @@ console.log(positionDetails);
 };
 
 (async () => {
-  const poolAddress = constants.ETH_pools.USDC_USDT.toLowerCase();
+  const poolAddress = constants.ETH_pools.DAI_USDC_500.toLowerCase();
   console.log(poolAddress);
   await getPositionsAndDetails(poolAddress, "ETH");
 })();

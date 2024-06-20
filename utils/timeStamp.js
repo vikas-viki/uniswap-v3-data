@@ -31,12 +31,12 @@ function getContract(address, rpc){
     return contract;
 }
 
-export async function getTickAtTimestamp(timestamp, rpc, address) {
+export async function getTickAtTimestamp(timestamp, rpc, address, blocknumber) {
     const contract = getContract(address, rpc);
-    const blockNumber = await getBlockNumberFromTimeStamp(timestamp);
+    // const blockNumber = await getBlockNumberFromTimeStamp(timestamp);
     try {
         const result = await contract.slot0({
-            blockTag: blockNumber
+            blockTag: blocknumber
         });
         // const timestamp = await getTimestampForBlock(blockNumber);
         // console.log('At blockNumber ', blockNumber, ' with timestamp ', timestamp, ' tick was: ', result.tick);
