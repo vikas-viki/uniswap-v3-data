@@ -1,7 +1,7 @@
 import { gql, Client, cacheExchange, fetchExchange } from "@urql/core";
 import fetch from "node-fetch";
 import * as XLSX from 'xlsx';
-import * as constants from "./constants.cjs";
+import * as constants from "../constants.cjs";
 
 
 const BIPS_BASE = 10000;

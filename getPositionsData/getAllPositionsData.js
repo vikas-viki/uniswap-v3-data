@@ -2,10 +2,12 @@ import { gql, Client, cacheExchange, fetchExchange } from "@urql/core";
 import fetch from "node-fetch";
 import { parse } from "json2csv";
 import fs from "fs";
-import * as constants from "./constants.cjs";
-import * as temps from "./utils.js"
+import path from 'path';
+import * as constants from "../constants.cjs";
+import * as temps from "../utils/positionManager.js"
 import { ethers } from "ethers";
 import BigNumber from 'bignumber.js';
+import { getTickAtTimestamp } from "../utils/timeStamp.js";
 
 BigNumber.config({ EXPONENTIAL_AT: 999999, DECIMAL_PLACES: 40 });
 
@@ -14,7 +16,7 @@ const client = new Client({
   exchanges: [cacheExchange, fetchExchange],
   fetch: fetch
 });
-
+// tick at openpositon position 
 
 const client_Messari = new Client({
   url: constants.MESSARI_ETH_URL,
@@ -51,7 +53,7 @@ const PositionsQuery = gql`
   query PositionsQuery($id: ID!, $timestamp_gt: BigInt){
     positions(
         where: {pool_: {id: $id}, transaction_: {timestamp_gt: $timestamp_gt}}
-        first: 1000
+        first: 10
         orderBy: transaction__timestamp
         orderDirection: asc
       ) {
@@ -66,9 +68,6 @@ const PositionsQuery = gql`
 const PositionDetailsQuery = gql`
   query PositionDetailsQuery($id: ID!){
     position(id: $id) {
-      amountCollectedUSD
-      amountDepositedUSD
-      amountWithdrawnUSD
       collectedFeesToken0
       collectedFeesToken1
       collectedToken0
@@ -206,7 +205,6 @@ const getPoolMetadata = async (poolId) => {
   ];
 };
 
-
 async function getCurrentLiquidityBalanceAmounts(positionId, poolTick, sqrtPrice) {
   const position = await getPositionInfo(positionId);
 
@@ -248,26 +246,24 @@ async function getCurrentLiquidityBalanceAmounts(positionId, poolTick, sqrtPrice
 
 async function getTimeStamps(tickLower, tickUpper, owner, pool, liquidity) {
   var variables = { index: tickUpper, index1: tickLower, liquidity: liquidity, id: owner, id1: pool };
-  var result = await client_Messari.query(PositionTimeStampQuery, variables);
+    var result = await client_Messari.query(PositionTimeStampQuery, variables);
 
   return [result.data.positions[0]?.timestampOpened, result.data.positions[0]?.timestampClosed == null ? Math.floor(Date.now() / 1000) : result.data.positions[0]?.timestampClosed];
 }
 
-/*
-APR
-*/
-const getPositionDetails = async (poolAddress, positionId, poolTick, sqrtPrice, token0Price, token1Price) => {
+const getPositionDetails = async (poolAddress, positionId, poolTick, sqrtPrice, token0Price, token1Price, rpc, nfpm) => {
 
-  var positionDetails = (await client.query(PositionDetailsQuery, { id: positionId }).toPromise()).data.position;
+  var positionDetails = (await client.query(PositionDetailsQuery, { id: positionId }).toPromise());
+  
+  positionDetails = positionDetails.data.position;
 
   var currentLiquidityBalanceAmounts = await getCurrentLiquidityBalanceAmounts(positionId, poolTick, sqrtPrice);
 
   var timeStamps = await getTimeStamps(positionDetails.tickLower, positionDetails.tickUpper, positionDetails.owner, poolAddress, positionDetails.liquidity);
 
-  console.log("currentLiquidityBalanceAmounts: ", currentLiquidityBalanceAmounts);
   var currentLiquidityUSD = (Number(currentLiquidityBalanceAmounts[0]) * token0Price) + (Number(currentLiquidityBalanceAmounts[1]) * token1Price);
 
-  var currentAccruedFees = await temps.getCurrentAccruedFees(positionId, positionDetails.owner);
+  var currentAccruedFees = await temps.getCurrentAccruedFees(positionId, positionDetails.owner, rpc, nfpm);
 
   let currentFeeAmount0 = Number(ethers.utils.formatUnits(currentAccruedFees[0], Number(currentLiquidityBalanceAmounts[2]))).toFixed(5);
   let currentFeeAmount1 = Number(ethers.utils.formatUnits(currentAccruedFees[1], Number(currentLiquidityBalanceAmounts[3]))).toFixed(5);
@@ -296,24 +292,40 @@ const getPositionDetails = async (poolAddress, positionId, poolTick, sqrtPrice, 
   }
 }
 
-const getPositionsAndDetails = async (poolAddress) => {
+const getPositionsAndDetails = async (poolAddress, network) => {
+
+  var rpc = constants.RPCs[network];
+  var nfpm = constants.NFPMs[network].toLowerCase();
+
   var currentTimeStamp = Math.floor(Date.now() / 1000);
   var poolMetadata = await getPoolMetadata(poolAddress);
 
   console.log("GOT POOL METADATA");
 
-  var positionIds = await getPositions(poolAddress, '1000');
+  var positionIds = await getPositions(poolAddress, 1000);
 
   console.log("GOT POSITIONS: ", positionIds.length);
 
   var positionDetails = [];
 
   for (let i = 0; i < positionIds.length; i++) {
-    var positionDetail = await getPositionDetails(poolAddress, positionIds[i], Number(poolMetadata[0]), Number(poolMetadata[1]), poolMetadata[2], poolMetadata[3], currentTimeStamp);
-    console.log(positionDetail);
+    var positionDetail = await getPositionDetails(
+      poolAddress, 
+      positionIds[i], 
+      Number(poolMetadata[0]), 
+      Number(poolMetadata[1]), 
+      poolMetadata[2], 
+      poolMetadata[3],
+      rpc,
+      nfpm
+    );
+    console.log("getting data: ", i);
+    let tick = await getTickAtTimestamp(positionDetail.timestampOpened, rpc, poolAddress);
+    positionDetail.tick = tick;
     positionDetails.push(positionDetail);
   }
-  console.log("GOT ALL THE DETAILS");
+console.log(positionDetails);
+  console.log("GOT ALL THE DETAILS: ");
   var data = [
     {
       'Pool Address': poolAddress,
@@ -329,6 +341,7 @@ const getPositionsAndDetails = async (poolAddress) => {
       'Tick Upper': 'Tick Upper',
       'Timestamp Closed': 'Timestamp Closed',
       'Timestamp Opened': 'Timestamp Opened',
+      'Tick': 'Tick',
       'Current liquidity USD': 'Current liquidity USD',
       'Deposited USD': 'Deposited USD',
       'Fees claimed USD': 'Fees claimed USD',
@@ -336,31 +349,49 @@ const getPositionsAndDetails = async (poolAddress) => {
       'Current timestamp': 'Current timestamp',
       'PNL': 'PNL'
     },
-    ...positionDetails.map(position => ({
-      'Account': position.address,
-      'nftID': position.nftID,
-      'Tick Lower': position.tickLower,
-      'Tick Upper': position.tickUpper,
-      'Timestamp Closed': position.timestampClosed,
-      'Timestamp Opened': position.timestampOpened,
-      'Current liquidity USD': position.currentLiquidityUSD,
-      'Deposited USD': position.totalDepositUSd,
-      'Fees claimed USD': position.feesClaimedUSD,
-      'Fees unclaimed USD': position.unclaimedFeesUSD,
-      'Current timestamp': currentTimeStamp,
-      'PNL': position.pnl
-    }))
+    ...positionDetails.map( position => {
+      return {
+        'Account': position.address,
+        'nftID': position.nftID,
+        'Tick Lower': position.tickLower,
+        'Tick Upper': position.tickUpper,
+        'Timestamp Closed': position.timestampClosed,
+        'Timestamp Opened': position.timestampOpened,
+        'Tick': position.tick,
+        'Current liquidity USD': position.currentLiquidityUSD,
+        'Deposited USD': position.totalDepositUSd,
+        'Fees claimed USD': position.feesClaimedUSD,
+        'Fees unclaimed USD': position.unclaimedFeesUSD,
+        'Current timestamp': currentTimeStamp,
+        'PNL': position.pnl
+      }
+    })
   ];
-
   const csv = parse(data);
-  const filePath = poolMetadata[4].toString() + '_' + poolMetadata[6].toString() + '_positions.csv';
-  fs.writeFileSync(filePath, csv);
+  const filename = poolMetadata[4].toString() + '_' + poolMetadata[6].toString() + '_positions.csv';
+
+  var dirs = process.cwd().toString().split("\\");
+  dirs.pop();
+  var joined = dirs.join("\\");
+  var path = joined + "\\data\\"+network.toLowerCase()+"\\"+"positions\\";
+  
+  try{
+    fs.mkdirSync(path, {recursive: true});
+  }catch{}
+  fs.writeFileSync(path+filename, csv);
 
   console.log('CSV file written successfully');
 
 };
 
 (async () => {
-  const poolAddress = "0x88e6A0c2dDD26FEEb64F039a2c41296FcB3f5640".toLowerCase();
-  await getPositionsAndDetails(poolAddress);
+  const poolAddress = constants.ETH_pools.USDC_USDT.toLowerCase();
+  console.log(poolAddress);
+  await getPositionsAndDetails(poolAddress, "ETH");
 })();
+
+/**
+ * 
+blocknumber = 20130998
+tick = 259353
+ */
