@@ -203,6 +203,7 @@ async function getPositionInfo(positionId) {
 }
 
 const TICK_BASE = new BigNumber(1.0001);
+const positionCountMul1000 = 1;
 
 function tickToPrice(tick) {
   return TICK_BASE.pow(tick);
@@ -326,11 +327,11 @@ const getPositionDetails = async (
 
   positionDetails = positionDetails.data.position;
 
-  var currentLiquidityBalanceAmounts = await getCurrentLiquidityBalanceAmounts(
-    positionId,
-    poolTick,
-    sqrtPrice
-  );
+  // var currentLiquidityBalanceAmounts = await getCurrentLiquidityBalanceAmounts(
+  //   positionId,
+  //   poolTick,
+  //   sqrtPrice
+  // );
 
   var timeStamps = await getTimeStamps(
     positionDetails.tickLower,
@@ -340,32 +341,35 @@ const getPositionDetails = async (
     positionDetails.liquidity
   );
 
-  var currentLiquidityUSD =
-    Number(currentLiquidityBalanceAmounts[0]) * token0Price +
-    Number(currentLiquidityBalanceAmounts[1]) * token1Price;
+  // var currentLiquidityUSD =
+  //   Number(currentLiquidityBalanceAmounts[0]) * token0Price +
+  //   Number(currentLiquidityBalanceAmounts[1]) * token1Price;
+  var currentLiquidityUSD = 0;
 
-  var currentAccruedFees = await temps.getCurrentAccruedFees(
-    positionId,
-    positionDetails.owner,
-    rpc,
-    nfpm
-  );
+  // var currentAccruedFees = await temps.getCurrentAccruedFees(
+  //   positionId,
+  //   positionDetails.owner,
+  //   rpc,
+  //   nfpm
+  // );
 
-  let currentFeeAmount0 = Number(
-    ethers.utils.formatUnits(
-      currentAccruedFees[0],
-      Number(currentLiquidityBalanceAmounts[2])
-    )
-  ).toFixed(5);
-  let currentFeeAmount1 = Number(
-    ethers.utils.formatUnits(
-      currentAccruedFees[1],
-      Number(currentLiquidityBalanceAmounts[3])
-    )
-  ).toFixed(5);
+  var currentAccruedFees = [0, 0];
 
-  var uncollectedFeesUSD =
-    currentFeeAmount0 * token0Price + currentFeeAmount1 * token1Price;
+  // let currentFeeAmount0 = Number(
+  //   ethers.utils.formatUnits(
+  //     currentAccruedFees[0],
+  //     Number(currentLiquidityBalanceAmounts[2])
+  //   )
+  // ).toFixed(5);
+  // let currentFeeAmount1 = Number(
+  //   ethers.utils.formatUnits(
+  //     currentAccruedFees[1],
+  //     Number(currentLiquidityBalanceAmounts[3])
+  //   )
+  // ).toFixed(5);
+
+  // var uncollectedFeesUSD =
+  //   currentFeeAmount0 * token0Price + currentFeeAmount1 * token1Price;
   var collectedFeesUSD =
     Number(positionDetails.collectedFeesToken0) * token0Price +
     Number(positionDetails.collectedFeesToken1) * token1Price;
@@ -377,15 +381,15 @@ const getPositionDetails = async (
     Number(positionDetails.withdrawnToken0).toFixed(5) * token0Price +
     Number(positionDetails.withdrawnToken1).toFixed(5) * token1Price;
 
-  var pnl =
-    currentLiquidityUSD -
-    totalDepositUSd +
-    totalWithdrawnUSd +
-    uncollectedFeesUSD +
-    collectedFeesUSD;
+  // var pnl =
+  //   currentLiquidityUSD -
+  //   totalDepositUSd +
+  //   totalWithdrawnUSd +
+  //   uncollectedFeesUSD +
+  //   collectedFeesUSD;
 
-  var blockNumberOpened = await getBlockNumberFromTimeStamp(timeStamps[0]);
-  var blockNumberClosed = await getBlockNumberFromTimeStamp(timeStamps[1]);
+  // var blockNumberOpened = await getBlockNumberFromTimeStamp(timeStamps[0]);
+  // var blockNumberClosed = await getBlockNumberFromTimeStamp(timeStamps[1]);
 
   return {
     nftID: positionId,
@@ -395,12 +399,12 @@ const getPositionDetails = async (
     totalDepositUSd: totalDepositUSd,
     currentLiquidityUSD,
     feesClaimedUSD: collectedFeesUSD,
-    unclaimedFeesUSD: uncollectedFeesUSD,
-    pnl,
+    unclaimedFeesUSD: 0,
+    pnl: 0,
     timestampOpened: timeStamps[0],
-    timestampClosed: timeStamps[1],
+    timestampClosed: 0,
     blockNumberOpened,
-    blockNumberClosed,
+    blockNumberClosed: 0,
   };
 };
 
@@ -413,7 +417,7 @@ const getPositionsAndDetails = async (poolAddress, network) => {
 
   console.log("GOT POOL METADATA");
 
-  var position = await getPositions(poolAddress, 1);
+  var position = await getPositions(poolAddress, positionCountMul1000);
   var positionIds = position[0];
   var blocknumber = position[1];
 
@@ -511,7 +515,7 @@ const getPositionsAndDetails = async (poolAddress, network) => {
 };
 
 (async () => {
-  const poolAddress = constants.ETH_pools.DAI_USDC.toLowerCase();
+  const poolAddress = constants.ETH_pools.WETH_USDC_500.toLowerCase();
   console.log(poolAddress);
   await getPositionsAndDetails(poolAddress, "ETH");
 })();
